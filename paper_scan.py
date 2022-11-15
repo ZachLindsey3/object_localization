@@ -18,6 +18,20 @@ def sectional_expected_value(pdf_h, pdf_v, height_cutoff=0.5):
     loc_h = np.where(pdf_h > height_cutoff)[0]
     loc_v = np.where(pdf_v > height_cutoff)[0]
 
+    #watch for no / low p of detection from the model
+    location_error_rate = 0
+    if np.shape(loc_h)[0] == 0:
+        print("### model error:")
+        print("no horizontal location found, defaulting to 0")
+        loc_h = np.array([0,])
+        location_error_rate += 1
+
+    if np.shape(loc_v)[0] == 0:
+        print("### model error:")
+        print("no vertical location found, defaulting to 0")
+        loc_v = np.array([0,])
+        location_error_rate += 1
+
     #group adjacent index values into "areas of interest"
     interest_split_h = []
     interest_split_v = []
@@ -46,7 +60,7 @@ def sectional_expected_value(pdf_h, pdf_v, height_cutoff=0.5):
     expected_location_v = np.dot(expected_range_v, pdf_v[expected_range_v]) / np.shape(expected_range_v)[0]
 
     #return expected location as numpy array with dimension (1,)
-    return(expected_location_h, expected_location_v)
+    return(expected_location_h, expected_location_v, location_error_rate)
 
 class sight:
     def __init__(self, img, img_no, model):
@@ -189,62 +203,25 @@ class sight:
         pdf_h = (-1*prediction_h) + 1
         pdf_v = (-1*prediction_v) + 1
 
+        horizontal_location, vertical_location, location_errors = sectional_expected_value(pdf_h, pdf_v,
+                                                                                            height_cutoff=0.5)
 
-        """
-        #print(pdf_h)
-        #print(pdf_v)
-
-        #print(np.diff(pdf_h, axis=0))
-
-        loc_h = np.where(pdf_h > 0.5)[0]
-        loc_v = np.where(pdf_v > 0.5)[0]
-
-        print(loc_h, loc_v)
-        print(np.diff(loc_h), np.diff(loc_v))
-
-        interest_split_h = []
-        interest_split_v = []
-        for i in range(len(np.diff(loc_h))):
-            if np.diff(loc_h)[i] > 1:
-                h = i+1
-                interest_split_h.append(h)
-
-        for i in range(len(np.diff(loc_v))):
-            if np.diff(loc_v)[i] > 1:
-                v = i+1
-                interest_split_v.append(v)
-
-        print(interest_split_h)
-        prob_test_h = np.split(loc_h, np.cumsum(interest_split_h))
-        print(prob_test_h)
-        roi_weight_h = np.asarray([np.sum(pdf_h[i]) for i in prob_test_h])
-        expected_range_h = prob_test_h[(np.where(roi_weight_h == np.amax(roi_weight_h))[0])[0]]
-        expected_location_h = np.dot(expected_range_h, pdf_h[expected_range_h]) / np.shape(expected_range_h)[0]
-        print(round(expected_location_h.item()))
-
-        prob_test_v = np.split(loc_v, np.cumsum(interest_split_v))
-
-        roi_weight_v = np.asarray([np.sum(pdf_v[i]) for i in prob_test_v])
-        expected_range_v = prob_test_v[(np.where(roi_weight_v == np.amax(roi_weight_v))[0])[0]]
-        expected_location_v = np.dot(expected_range_v, pdf_v[expected_range_v]) / np.shape(expected_range_v)[0]
-        print(round(expected_location_v.item()))
-        print(pdf_v)
-
-        #bar_h_list[loc_h[0]].show()
-        #bar_v_list[loc_v[0]].show()
-        """
-        horizontal_location, vertical_location = sectional_expected_value(pdf_h, pdf_v, height_cutoff=0.5)
+        if location_errors > 1:
+            print("###severe model error:")
+            print("consider changing bar_width or lowering height_cutoff")
 
         located_image = class_img_test.redborder_adjustable(img_y, bar_width,
                                                             round(horizontal_location.item()),
                                                             round(vertical_location.item()))
         located_image.show()
 
+
 base_dir = '/Users/zslindsey/Desktop/MF/paper'
 val_yes_dir = os.path.join(base_dir, 'validation/yes')
 val_no_dir = os.path.join(base_dir, 'validation/no')
 
 test_yes_dir = os.path.join(base_dir, 'test/yes')
+test_no_dir = os.path.join(base_dir, 'test/no')
 
 fnames_yes = [os.path.join(val_yes_dir, fname) for
         fname in os.listdir(val_yes_dir)]
@@ -252,24 +229,34 @@ fnames_yes = [os.path.join(val_yes_dir, fname) for
 fnames_test_yes = [os.path.join(test_yes_dir, fname) for
         fname in os.listdir(test_yes_dir)]
 
+fnames_test_no = [os.path.join(test_no_dir, fname) for
+        fname in os.listdir(test_no_dir)]
+
 fname_no = os.path.join(val_no_dir, os.listdir(val_no_dir)[0])
 
-
-class_img_test = sight(Image.open(fnames_test_yes[9]), Image.open(fname_no),
-                                keras.models.load_model('/Users/zslindsey/Desktop/MF/paper/paper_1.h5'))
+"""
+# look at one test image
+class_img_test = sight(Image.open(fnames_test_yes[0]), Image.open(fname_no),
+                                keras.models.load_model('/Users/zslindsey/Desktop/MF/paper/paper_2.h5'))
 
 class_img_test.scan(30)
-
 """
+
+
+#scan through all test images
 for scan_image in fnames_test_yes:
     class_img_test = sight(Image.open(scan_image), Image.open(fname_no),
-                                    keras.models.load_model('/Users/zslindsey/Desktop/MF/paper/paper_1.h5'))
+                                    keras.models.load_model('/Users/zslindsey/Desktop/MF/paper/paper_2.h5'))
 
     class_img_test.scan(30)
-"""
+
 
 """Notes:
 bar_width 10, end to end, gives 5 full accuracy + 2 half accuracy
 bar_width 10, half shift per frame, gives 5 full accuracy + 3 half accuracy
 test 0 and 5
+
+bar_width of 30 seems to work better, only 2-3 half accuracy, the rest are full accuracy
+
+model paper_2.h5 has 9 full and 1 half accuracy with bar_width 30
 """
